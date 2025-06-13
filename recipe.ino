@@ -131,7 +131,7 @@ void changeScreen(const char* filename) {
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-C3 E-Paper 2-Button Screen Switch Demo");
+  Serial.println("ESP32-C3 E-Paper LittleFS Button Control Demo");
   Serial.println("Starting E-Paper initialization...");
 
   // ボタンピンをプルアップ入力として設定
@@ -143,8 +143,7 @@ void setup() {
   Serial.println("E-Paper initialization complete.");
 
   // 初期画面を表示
-  currentScreen = 0;
-  drawScreen(currentScreen);
+  changeScreen("/initial.txt");
 }
 
 void loop() {
