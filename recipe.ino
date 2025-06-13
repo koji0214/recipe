@@ -15,7 +15,7 @@ GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT> display(
 
 // --- 初期画面表示用の関数 ---
 void displayInitialScreen() {
-  display.setRotation(1); // ディスプレイの向きを調整
+  display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
   display.setFullWindow(); // 全画面更新
@@ -63,7 +63,6 @@ void setup() {
   displayInitialScreen();
 }
 
-// --- loop() 関数: 何も実行しない ---
 void loop() {
   // put your main code here, to run repeatedly:
 
