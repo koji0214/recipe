@@ -14,7 +14,10 @@ GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT> display(
   GxEPD2_420_GDEY042T81(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 // --- 初期画面表示用の関数 ---
-void displayInitialScreen() {
+
+
+// --- 画面描画関数 ---
+void drawScreen(int screenNumber) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
@@ -23,9 +26,24 @@ void displayInitialScreen() {
   do {
     display.fillScreen(GxEPD_WHITE); // 画面を白でクリア
 
+    const char* message1 = "";
+    const char* message2 = "";
+
+    if (screenNumber == 0) {
+      message1 = "Initial Screen";
+      message2 = "Press a button to navigate";
+      display.setFont(&FreeSansBold12pt7b);
+    } else if (screenNumber == 1) {
+      message1 = "Screen A";
+      message2 = "Button 1 was pressed!";
+      display.setFont(&FreeSansBold12pt7b);
+    } else if (screenNumber == 2) {
+      message1 = "Screen B";
+      message2 = "Button 2 was pressed!";
+      display.setFont(&FreeSansBold12pt7b);
+    }
+
     // 1行目のメッセージ
-    display.setFont(&FreeSansBold12pt7b); // 大きめのフォントを使用
-    const char* message1 = "Welcome to E-Paper!";
     int16_t tbx1, tby1;
     uint16_t tbw1, tbh1;
     display.getTextBounds(message1, 0, 0, &tbx1, &tby1, &tbw1, &tbh1);
@@ -35,8 +53,7 @@ void displayInitialScreen() {
     display.print(message1);
 
     // 2行目のメッセージ
-    display.setFont(&FreeMonoBold9pt7b); // 小さめのフォントを使用
-    const char* message2 = "Initial Screen Displayed.";
+    display.setFont(&FreeMonoBold9pt7b); // 2行目は小さめのフォント
     int16_t tbx2, tby2;
     uint16_t tbw2, tbh2;
     display.getTextBounds(message2, 0, 0, &tbx2, &tby2, &tbw2, &tbh2);
@@ -46,7 +63,7 @@ void displayInitialScreen() {
     display.print(message2);
 
   } while (display.nextPage()); // 次のページがある場合は描画を続ける
-  Serial.println("Initial screen displayed.");
+  Serial.printf("Displaying Screen %d\n", screenNumber);
 }
 
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
