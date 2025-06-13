@@ -50,7 +50,8 @@ String readFileContent(const char* filename) {
   return content;
 }
 
-void drawScreen(int screenNumber) {
+// --- E-Paperにテキストを描画する関数 ---
+void drawTextOnEpaper(const String& textToDisplay) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
@@ -59,44 +60,72 @@ void drawScreen(int screenNumber) {
   do {
     display.fillScreen(GxEPD_WHITE); // 画面を白でクリア
 
-    const char* message1 = "";
-    const char* message2 = "";
+    // テキストを改行で分割し、中央に表示
+    int lineCount = 0;
+    int prevIndex = 0;
+    int currentIndex = 0;
+    String lines[5]; // 最大5行まで対応（必要に応じて調整）
 
-    if (screenNumber == 0) {
-      message1 = "Initial Screen";
-      message2 = "Press a button to navigate";
-      display.setFont(&FreeSansBold12pt7b);
-    } else if (screenNumber == 1) {
-      message1 = "Screen A";
-      message2 = "Button 1 was pressed!";
-      display.setFont(&FreeSansBold12pt7b);
-    } else if (screenNumber == 2) {
-      message1 = "Screen B";
-      message2 = "Button 2 was pressed!";
-      display.setFont(&FreeSansBold12pt7b);
+    // 改行コード '\n' でテキストを分割
+    while (currentIndex != -1 && lineCount < 5) {
+      currentIndex = textToDisplay.indexOf('\n', prevIndex);
+      if (currentIndex == -1) {
+        lines[lineCount++] = textToDisplay.substring(prevIndex);
+      } else {
+        lines[lineCount++] = textToDisplay.substring(prevIndex, currentIndex);
+        prevIndex = currentIndex + 1;
+      }
     }
 
-    // 1行目のメッセージ
-    int16_t tbx1, tby1;
-    uint16_t tbw1, tbh1;
-    display.getTextBounds(message1, 0, 0, &tbx1, &tby1, &tbw1, &tbh1);
-    uint16_t x1 = (display.width() - tbw1) / 2 - tbx1;
-    uint16_t y1 = display.height() / 2 - tbh1 - 10; // 中央より少し上に表示
-    display.setCursor(x1, y1);
-    display.print(message1);
+    // 各行を画面に描画
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+    int totalTextHeight = 0;
+    
+    // フォント設定の準備 (FreeSansBold12pt7bをメイン、FreeMonoBold9pt7bをサブとして使う)
+    display.setFont(&FreeSansBold12pt7b); // 1行目用のフォント
+    display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
+    totalTextHeight += tbh * (lineCount > 0 ? 1 : 0); // 1行目
+    
+    if (lineCount > 1) {
+      display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
+      display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
+      totalTextHeight += tbh * (lineCount - 1); // 2行目以降
+    }
 
-    // 2行目のメッセージ
-    display.setFont(&FreeMonoBold9pt7b); // 2行目は小さめのフォント
-    int16_t tbx2, tby2;
-    uint16_t tbw2, tbh2;
-    display.getTextBounds(message2, 0, 0, &tbx2, &tby2, &tbw2, &tbh2);
-    uint16_t x2 = (display.width() - tbw2) / 2 - tbx2;
-    uint16_t y2 = display.height() / 2 + tbh2 + 10; // 中央より少し下に表示
-    display.setCursor(x2, y2);
-    display.print(message2);
+    // 全体の高さを考慮して開始Y座標を計算
+    uint16_t startY = (display.height() - totalTextHeight) / 2;
+    if (startY < 0) startY = 0; // 画面内に収まらない場合の上限
 
-  } while (display.nextPage()); // 次のページがある場合は描画を続ける
-  Serial.printf("Displaying Screen %d\n", screenNumber);
+    uint16_t currentY = startY;
+
+    for (int i = 0; i < lineCount; ++i) {
+      if (i == 0) {
+        display.setFont(&FreeSansBold12pt7b); // 1行目のフォント
+      } else {
+        display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
+      }
+
+      display.getTextBounds(lines[i], 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x = (display.width() - tbw) / 2 - tbx;
+      
+      display.setCursor(x, currentY - tby); // テキストの上端にカーソルを合わせる
+
+      display.print(lines[i]);
+      currentY += tbh + 2; // 行の高さ＋行間
+    }
+
+  } while (display.nextPage());
+  Serial.printf("Displayed content:\n%s\n", textToDisplay.c_str());
+}
+
+// --- 画面切り替え関数 ---
+void changeScreen(const char* filename) {
+  String content = readFileContent(filename);
+  if (content != currentDisplayFile) { // 同じ内容を二度表示しない
+    drawTextOnEpaper(content);
+    currentDisplayFile = content; // 表示したファイルの内容を記録
+  }
 }
 
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
