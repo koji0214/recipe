@@ -13,7 +13,19 @@
 GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT> display(
   GxEPD2_420_GDEY042T81(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
-// --- 初期画面表示用の関数 ---
+// --- ボタン制御用の変数 ---
+#define BUTTON_PIN_1 8  // 1つ目のボタンを接続するGPIOピン (XIAO D8 / SCK)
+#define BUTTON_PIN_2 10 // 2つ目のボタンを接続するGPIOピン (XIAO D10 / MOSI)
+
+long lastButton1PressTime = 0; // 1つ目のボタン用デバウンス変数
+long lastButton2PressTime = 0; // 2つ目のボタン用デバウンス変数
+long lastSimultaneousPressTime = 0; // 同時押し判定のための最後のチェック時間
+const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
+
+// --- 画面の状態を管理する変数 ---
+int currentScreen = 0; // 0: 初期画面, 1: Screen A, 2: Screen B
+
+
 
 
 // --- 画面描画関数 ---
@@ -69,18 +81,54 @@ void drawScreen(int screenNumber) {
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-C3 E-Paper Initial Screen Demo");
+  Serial.println("ESP32-C3 E-Paper 2-Button Screen Switch Demo");
   Serial.println("Starting E-Paper initialization...");
+
+  // ボタンピンをプルアップ入力として設定
+  pinMode(BUTTON_PIN_1, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_2, INPUT_PULLUP);
 
   // E-Paperディスプレイの初期化
   display.init(115200, true, 50, false);
   Serial.println("E-Paper initialization complete.");
 
-  // 初期画面表示
-  displayInitialScreen();
+  // 初期画面を表示
+  currentScreen = 0;
+  drawScreen(currentScreen);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  int button1State = digitalRead(BUTTON_PIN_1);
+  int button2State = digitalRead(BUTTON_PIN_2);
+  unsigned long currentTime = millis();
 
+  // --- 同時押し検出ロジック ---
+  if (button1State == LOW && button2State == LOW) {
+    if (currentTime - lastSimultaneousPressTime > debounceDelay) {
+      lastSimultaneousPressTime = currentTime; 
+      if (currentScreen != 0) { // 現在初期画面でなければ更新
+        currentScreen = 0; // 初期画面に戻る
+        drawScreen(currentScreen);
+      }
+    }
+  } 
+  // --- 単独押し検出ロジック ---
+  else if (button1State == LOW) {
+    if (currentTime - lastButton1PressTime > debounceDelay) {
+      lastButton1PressTime = currentTime;
+      if (currentScreen != 1) { // 現在Screen Aでなければ更新
+        currentScreen = 1; // Screen A に切り替え
+        drawScreen(currentScreen);
+      }
+    }
+  } 
+  else if (button2State == LOW) {
+    if (currentTime - lastButton2PressTime > debounceDelay) {
+      lastButton2PressTime = currentTime;
+      if (currentScreen != 2) { // 現在Screen Bでなければ更新
+        currentScreen = 2; // Screen B に切り替え
+        drawScreen(currentScreen);
+      }
+    }
+  }
 }
