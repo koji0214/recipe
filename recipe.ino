@@ -23,8 +23,8 @@ long lastButton2PressTime = 0; // 2つ目のボタン用デバウンス変数
 long lastSimultaneousPressTime = 0; // 同時押し判定のための最後のチェック時間
 const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
 
-// --- 画面の状態を管理する変数 ---
-int currentScreen = 0; // 0: 初期画面, 1: Screen A, 2: Screen B
+// --- 現在表示中の画面の状態を管理する変数 ---
+String currentDisplayFile = ""; // 現在表示しているファイル名 (例: "/initial.txt")
 
 // --- ファイルからテキストを読み込むヘルパー関数 ---
 String readFileContent(const char* filename) {
@@ -155,29 +155,23 @@ void loop() {
   if (button1State == LOW && button2State == LOW) {
     if (currentTime - lastSimultaneousPressTime > debounceDelay) {
       lastSimultaneousPressTime = currentTime; 
-      if (currentScreen != 0) { // 現在初期画面でなければ更新
-        currentScreen = 0; // 初期画面に戻る
-        drawScreen(currentScreen);
-      }
+      changeScreen("/initial.txt"); // 初期画面に戻る
     }
   } 
   // --- 単独押し検出ロジック ---
   else if (button1State == LOW) {
     if (currentTime - lastButton1PressTime > debounceDelay) {
       lastButton1PressTime = currentTime;
-      if (currentScreen != 1) { // 現在Screen Aでなければ更新
-        currentScreen = 1; // Screen A に切り替え
-        drawScreen(currentScreen);
-      }
+      changeScreen("/weekly.txt");
     }
   } 
   else if (button2State == LOW) {
     if (currentTime - lastButton2PressTime > debounceDelay) {
       lastButton2PressTime = currentTime;
-      if (currentScreen != 2) { // 現在Screen Bでなければ更新
-        currentScreen = 2; // Screen B に切り替え
-        drawScreen(currentScreen);
-      }
+      changeScreen("/daily.txt");
     }
   }
+
+  // 短い遅延を入れてCPUの負荷を軽減
+  delay(10); 
 }
