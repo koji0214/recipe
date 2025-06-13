@@ -13,8 +13,23 @@
 GxEPD2_BW<GxEPD2_420_GDEY042T81, GxEPD2_420_GDEY042T81::HEIGHT> display(
   GxEPD2_420_GDEY042T81(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
-// --- 初期画面表示用の関数 ---
-void displayInitialScreen() {
+// --- ボタン制御用の変数 ---
+#define BUTTON_PIN_1 8  // 1つ目のボタンを接続するGPIOピン (XIAO D8 / SCK)
+#define BUTTON_PIN_2 10 // 2つ目のボタンを接続するGPIOピン (XIAO D10 / MOSI)
+
+long lastButton1PressTime = 0; // 1つ目のボタン用デバウンス変数
+long lastButton2PressTime = 0; // 2つ目のボタン用デバウンス変数
+long lastSimultaneousPressTime = 0; // 同時押し判定のための最後のチェック時間
+const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
+
+// --- 画面の状態を管理する変数 ---
+int currentScreen = 0; // 0: 初期画面, 1: Screen A, 2: Screen B
+
+
+
+
+// --- 画面描画関数 ---
+void drawScreen(int screenNumber) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
@@ -23,9 +38,24 @@ void displayInitialScreen() {
   do {
     display.fillScreen(GxEPD_WHITE); // 画面を白でクリア
 
+    const char* message1 = "";
+    const char* message2 = "";
+
+    if (screenNumber == 0) {
+      message1 = "Initial Screen";
+      message2 = "Press a button to navigate";
+      display.setFont(&FreeSansBold12pt7b);
+    } else if (screenNumber == 1) {
+      message1 = "Screen A";
+      message2 = "Button 1 was pressed!";
+      display.setFont(&FreeSansBold12pt7b);
+    } else if (screenNumber == 2) {
+      message1 = "Screen B";
+      message2 = "Button 2 was pressed!";
+      display.setFont(&FreeSansBold12pt7b);
+    }
+
     // 1行目のメッセージ
-    display.setFont(&FreeSansBold12pt7b); // 大きめのフォントを使用
-    const char* message1 = "Welcome to E-Paper!";
     int16_t tbx1, tby1;
     uint16_t tbw1, tbh1;
     display.getTextBounds(message1, 0, 0, &tbx1, &tby1, &tbw1, &tbh1);
@@ -35,8 +65,7 @@ void displayInitialScreen() {
     display.print(message1);
 
     // 2行目のメッセージ
-    display.setFont(&FreeMonoBold9pt7b); // 小さめのフォントを使用
-    const char* message2 = "Initial Screen Displayed.";
+    display.setFont(&FreeMonoBold9pt7b); // 2行目は小さめのフォント
     int16_t tbx2, tby2;
     uint16_t tbw2, tbh2;
     display.getTextBounds(message2, 0, 0, &tbx2, &tby2, &tbw2, &tbh2);
@@ -46,24 +75,60 @@ void displayInitialScreen() {
     display.print(message2);
 
   } while (display.nextPage()); // 次のページがある場合は描画を続ける
-  Serial.println("Initial screen displayed.");
+  Serial.printf("Displaying Screen %d\n", screenNumber);
 }
 
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-C3 E-Paper Initial Screen Demo");
+  Serial.println("ESP32-C3 E-Paper 2-Button Screen Switch Demo");
   Serial.println("Starting E-Paper initialization...");
+
+  // ボタンピンをプルアップ入力として設定
+  pinMode(BUTTON_PIN_1, INPUT_PULLUP);
+  pinMode(BUTTON_PIN_2, INPUT_PULLUP);
 
   // E-Paperディスプレイの初期化
   display.init(115200, true, 50, false);
   Serial.println("E-Paper initialization complete.");
 
-  // 初期画面表示
-  displayInitialScreen();
+  // 初期画面を表示
+  currentScreen = 0;
+  drawScreen(currentScreen);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  int button1State = digitalRead(BUTTON_PIN_1);
+  int button2State = digitalRead(BUTTON_PIN_2);
+  unsigned long currentTime = millis();
 
+  // --- 同時押し検出ロジック ---
+  if (button1State == LOW && button2State == LOW) {
+    if (currentTime - lastSimultaneousPressTime > debounceDelay) {
+      lastSimultaneousPressTime = currentTime; 
+      if (currentScreen != 0) { // 現在初期画面でなければ更新
+        currentScreen = 0; // 初期画面に戻る
+        drawScreen(currentScreen);
+      }
+    }
+  } 
+  // --- 単独押し検出ロジック ---
+  else if (button1State == LOW) {
+    if (currentTime - lastButton1PressTime > debounceDelay) {
+      lastButton1PressTime = currentTime;
+      if (currentScreen != 1) { // 現在Screen Aでなければ更新
+        currentScreen = 1; // Screen A に切り替え
+        drawScreen(currentScreen);
+      }
+    }
+  } 
+  else if (button2State == LOW) {
+    if (currentTime - lastButton2PressTime > debounceDelay) {
+      lastButton2PressTime = currentTime;
+      if (currentScreen != 2) { // 現在Screen Bでなければ更新
+        currentScreen = 2; // Screen B に切り替え
+        drawScreen(currentScreen);
+      }
+    }
+  }
 }
