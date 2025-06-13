@@ -1,0 +1,3 @@
+This is Weekly page!
+content A
+content B
