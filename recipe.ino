@@ -1,3 +1,4 @@
+#include <LittleFS.h> // LittleFSライブラリ
 #include <GxEPD2_BW.h>
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
@@ -25,10 +26,30 @@ const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
 // --- 画面の状態を管理する変数 ---
 int currentScreen = 0; // 0: 初期画面, 1: Screen A, 2: Screen B
 
+// --- ファイルからテキストを読み込むヘルパー関数 ---
+String readFileContent(const char* filename) {
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed!");
+    return "FS Error!"; // エラーメッセージを返す
+  }
 
+  File file = LittleFS.open(filename, "r");
+  if (!file) {
+    Serial.printf("Failed to open file: %s\n", filename);
+    LittleFS.end();
+    return "File Not Found!"; // エラーメッセージを返す
+  }
 
+  String content = "";
+  while (file.available()) {
+    content += (char)file.read();
+  }
+  file.close();
+  LittleFS.end(); // 読み込みが終わったらアンマウント
 
-// --- 画面描画関数 ---
+  return content;
+}
+
 void drawScreen(int screenNumber) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
