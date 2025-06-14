@@ -89,7 +89,7 @@ void drawErrorMessage(const String& title, const String& message) {
 
   } while (display.nextPage());
   Serial.printf("Error displayed: Title='%s', Message='%s'\n", title.c_str(), message.c_str());
-    }
+}
 
 // --- E-Paperに日付一覧を描画する関数 ---
 void drawDateList(int highlightIndex) {
@@ -221,7 +221,7 @@ void updateDisplay() {
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-C3 E-Paper LittleFS Button Control Demo");
+  Serial.println("ESP32-C3 E-Paper Date List & Details Demo");
   Serial.println("Starting E-Paper initialization...");
 
   // ボタンピンをプルアップ入力として設定
@@ -232,8 +232,17 @@ void setup() {
   display.init(115200, true, 50, false);
   Serial.println("E-Paper initialization complete.");
 
-  // 初期画面を表示
-  changeScreen("/initial.txt");
+  // JSONファイルを読み込む
+  if (!loadContentsJson()) {
+    Serial.println("Failed to load contents.json. Please check file and LittleFS upload.");
+    drawErrorMessage("Fatal Error!", "Failed to load contents.json. Check Serial for details.");
+    while(true); // 致命的なエラーなので停止
+  }
+
+  // 初期画面は日付一覧表示
+  currentDayIndex = 0; // 最初の項目をハイライト
+  showContentDetails = false; // 日付一覧モード
+  updateDisplay(); // 画面を更新
 }
 
 void loop() {
@@ -241,27 +250,54 @@ void loop() {
   int button2State = digitalRead(BUTTON_PIN_2);
   unsigned long currentTime = millis();
 
-  // --- 同時押し検出ロジック ---
+  // --- 同時押し検出ロジック (常に日付一覧に戻る) ---
   if (button1State == LOW && button2State == LOW) {
     if (currentTime - lastSimultaneousPressTime > debounceDelay) {
       lastSimultaneousPressTime = currentTime; 
-      changeScreen("/initial.txt"); // 初期画面に戻る
+      if (showContentDetails || currentDayIndex != 0) { // すでに一覧画面で最初の項目がハイライトされていなければ更新
+        showContentDetails = false; // 日付一覧モードに設定
+        currentDayIndex = 0; // 最初の項目をハイライト
+        updateDisplay();
+      }
     }
   } 
   // --- 単独押し検出ロジック ---
-  else if (button1State == LOW) {
+  else if (button1State == LOW) { // BUTTON 1: 詳細表示 or 次の詳細
     if (currentTime - lastButton1PressTime > debounceDelay) {
       lastButton1PressTime = currentTime;
-      changeScreen("/weekly.txt");
+      
+      if (!showContentDetails) {
+        // 日付一覧表示の場合、ハイライトされた日付の詳細コンテンツ表示に切り替える
+        showContentDetails = true;
+      } else {
+        // コンテンツ詳細表示の場合、次の日付の詳細表示に切り替える
+        currentDayIndex++; // 次の日に進む
+        if (currentDayIndex >= dataArray.size()) {
+          currentDayIndex = 0; // 最後のコンテンツなら最初に戻る
+        }
+        // showContentDetails は true のまま維持
+      }
+      updateDisplay(); // 画面を更新
     }
   } 
-  else if (button2State == LOW) {
+  else if (button2State == LOW) { // BUTTON 2: 前の日付選択 or 日付一覧に戻る
     if (currentTime - lastButton2PressTime > debounceDelay) {
       lastButton2PressTime = currentTime;
-      changeScreen("/daily.txt");
+      
+      if (showContentDetails) {
+        // 詳細表示の場合、日付一覧に戻る
+        showContentDetails = false; 
+      } else {
+        // 日付一覧表示の場合、ハイライトを前の日付に移動
+        currentDayIndex--; 
+        if (currentDayIndex < 0) {
+          currentDayIndex = dataArray.size() - 1; // 最初のコンテンツなら最後に戻る
+        }
+      }
+      updateDisplay(); // 画面を更新
     }
   }
 
   // 短い遅延を入れてCPUの負荷を軽減
-  delay(10); 
+  delay(10);
 }
