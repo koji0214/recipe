@@ -1,5 +1,5 @@
-#include <LittleFS.h> // LittleFSライブラリ
-#include <ArduinoJson.h> // ArduinoJsonライブラリ
+#include <LittleFS.h>
+#include <ArduinoJson.h>
 #include <GxEPD2_BW.h>
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
