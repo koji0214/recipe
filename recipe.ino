@@ -194,12 +194,27 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
   Serial.printf("Displayed date and details: %s\n", date.c_str());
 }
 
-// --- 画面切り替え関数 ---
-void changeScreen(const char* filename) {
-  String content = readFileContent(filename);
-  if (content != currentDisplayFile) { // 同じ内容を二度表示しない
-    drawTextOnEpaper(content);
-    currentDisplayFile = content; // 表示したファイルの内容を記録
+
+// --- 現在の表示モードとインデックスに基づいて画面を更新する関数 ---
+void updateDisplay() {
+  if (dataArray.size() == 0) {
+    drawErrorMessage("No Data!", "contents.json is empty.");
+    return;
+  }
+
+  if (showContentDetails) {
+    // コンテンツ詳細表示モード
+    if (currentDayIndex >= 0 && currentDayIndex < dataArray.size()) {
+      JsonObject dayData = dataArray[currentDayIndex];
+      String date = dayData["date"].as<String>();
+      JsonArray contents = dayData["contents"].as<JsonArray>();
+      drawDayContentDetails(date, contents);
+    } else {
+      drawErrorMessage("Error!", "Selected day content not found.");
+    }
+  } else {
+    // 日付一覧表示モード
+    drawDateList(currentDayIndex);
   }
 }
 
