@@ -1,8 +1,10 @@
 #include <LittleFS.h> // LittleFSライブラリ
+#include <ArduinoJson.h> // ArduinoJsonライブラリ
 #include <GxEPD2_BW.h>
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
-#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h> // 日付表示用
+#include <Fonts/FreeSansBold9pt7b.h>  // 日付一覧用
 
 // --- E-Paperディスプレイのピン定義 ---
 #define EPD_CS    7  // Chip Select (SS)      -> XIAO D5 / SCL (GPIO7) に接続
@@ -23,35 +25,48 @@ long lastButton2PressTime = 0; // 2つ目のボタン用デバウンス変数
 long lastSimultaneousPressTime = 0; // 同時押し判定のための最後のチェック時間
 const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
 
-// --- 現在表示中の画面の状態を管理する変数 ---
-String currentDisplayFile = ""; // 現在表示しているファイル名 (例: "/initial.txt")
+// --- グローバル変数: JSONコンテンツを保持 ---
+// StaticJsonDocument<XXXX> doc; のようにサイズを明示的に指定することを強く推奨
+// 今回のJSON例ではおおよそ500B程度。余裕を見て1024B (1KB) 程度あれば安全でしょう。
+StaticJsonDocument<1024> doc; 
+JsonArray dataArray; // JSONの最上位配列（日付ごとのデータ）
 
-// --- ファイルからテキストを読み込むヘルパー関数 ---
-String readFileContent(const char* filename) {
+// --- 現在表示中のコンテンツのインデックスと表示モード ---
+int currentDayIndex = 0; // ハイライトされている日付のインデックス
+bool showContentDetails = false; // true: コンテンツ詳細表示, false: 日付一覧表示
+
+// --- ファイルからJSONを読み込むヘルパー関数 ---
+bool loadContentsJson() {
   if (!LittleFS.begin()) {
     Serial.println("LittleFS Mount Failed!");
-    return "FS Error!"; // エラーメッセージを返す
+    return false;
   }
 
-  File file = LittleFS.open(filename, "r");
+  File file = LittleFS.open("/contents.json", "r");
   if (!file) {
-    Serial.printf("Failed to open file: %s\n", filename);
+    Serial.println("Failed to open contents.json for reading!");
     LittleFS.end();
-    return "File Not Found!"; // エラーメッセージを返す
+    return false;
   }
 
-  String content = "";
-  while (file.available()) {
-    content += (char)file.read();
+  DeserializationError error = deserializeJson(doc, file);
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    file.close();
+    LittleFS.end();
+    return false;
   }
+
+  dataArray = doc["recipes"];
   file.close();
   LittleFS.end(); // 読み込みが終わったらアンマウント
-
-  return content;
+  Serial.println("contents.json loaded successfully.");
+  return true;
 }
 
-// --- E-Paperにテキストを描画する関数 ---
-void drawTextOnEpaper(const String& textToDisplay) {
+// --- E-Paperにエラーメッセージを描画する専用関数 ---
+void drawErrorMessage(const String& title, const String& message) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
@@ -59,79 +74,154 @@ void drawTextOnEpaper(const String& textToDisplay) {
   display.firstPage(); // 描画開始
   do {
     display.fillScreen(GxEPD_WHITE); // 画面を白でクリア
-
-    // テキストを改行で分割し、中央に表示
-    int lineCount = 0;
-    int prevIndex = 0;
-    int currentIndex = 0;
-    String lines[5]; // 最大5行まで対応（必要に応じて調整）
-
-    // 改行コード '\n' でテキストを分割
-    while (currentIndex != -1 && lineCount < 5) {
-      currentIndex = textToDisplay.indexOf('\n', prevIndex);
-      if (currentIndex == -1) {
-        lines[lineCount++] = textToDisplay.substring(prevIndex);
-      } else {
-        lines[lineCount++] = textToDisplay.substring(prevIndex, currentIndex);
-        prevIndex = currentIndex + 1;
-      }
-    }
-
-    // 各行を画面に描画
+    display.setFont(&FreeSansBold12pt7b); // タイトル用フォント
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    int totalTextHeight = 0;
-    
-    // フォント設定の準備 (FreeSansBold12pt7bをメイン、FreeMonoBold9pt7bをサブとして使う)
-    display.setFont(&FreeSansBold12pt7b); // 1行目用のフォント
-    display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
-    totalTextHeight += tbh * (lineCount > 0 ? 1 : 0); // 1行目
-    
-    if (lineCount > 1) {
-      display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
-      display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
-      totalTextHeight += tbh * (lineCount - 1); // 2行目以降
-    }
 
-    // 全体の高さを考慮して開始Y座標を計算
-    uint16_t startY = (display.height() - totalTextHeight) / 2;
-    if (startY < 0) startY = 0; // 画面内に収まらない場合の上限
+    display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor((display.width() - tbw) / 2 - tbx, display.height() / 2 - 30);
+    display.print(title);
 
+    display.setFont(&FreeMonoBold9pt7b); // メッセージ用フォント
+    display.getTextBounds(message, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor((display.width() - tbw) / 2 - tbx, display.height() / 2 + 10);
+    display.print(message);
+
+  } while (display.nextPage());
+  Serial.printf("Error displayed: Title='%s', Message='%s'\n", title.c_str(), message.c_str());
+}
+
+// --- E-Paperに日付一覧を描画する関数 ---
+void drawDateList(int highlightIndex) {
+  display.setRotation(0); // 回転なし
+  display.setTextColor(GxEPD_BLACK);
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+
+    display.setFont(&FreeSansBold9pt7b); // 日付一覧用フォント
+    uint16_t lineHeight = 22; // 各日付行の高さの目安
+    uint16_t startY = 20; // 画面上部からの開始位置
     uint16_t currentY = startY;
 
-    for (int i = 0; i < lineCount; ++i) {
-      if (i == 0) {
-        display.setFont(&FreeSansBold12pt7b); // 1行目のフォント
+    // ヘッダー (任意)
+    String header = "Select Date:";
+    int16_t h_tbx, h_tby;
+    uint16_t h_tbw, h_tbh;
+    display.getTextBounds(header, 0, 0, &h_tbx, &h_tby, &h_tbw, &h_tbh);
+    display.setCursor((display.width() - h_tbw) / 2 - h_tbx, currentY);
+    display.print(header);
+    currentY += lineHeight + 5; // ヘッダーとリストの間隔
+
+    for (int i = 0; i < dataArray.size(); ++i) {
+      JsonObject dayData = dataArray[i];
+      Serial.println("dayData: " + dayData);
+      String date = dayData["date"].as<String>();
+
+      if (i == highlightIndex) {
+        // ハイライト表示
+        display.fillRect(0, currentY - 18, display.width(), lineHeight, GxEPD_BLACK); // 背景を黒く塗る
+        display.setTextColor(GxEPD_WHITE); // テキストを白くする
       } else {
-        display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
+        display.setTextColor(GxEPD_BLACK); // 通常のテキスト色
       }
 
-      display.getTextBounds(lines[i], 0, 0, &tbx, &tby, &tbw, &tbh);
-      uint16_t x = (display.width() - tbw) / 2 - tbx;
-      
-      display.setCursor(x, currentY - tby); // テキストの上端にカーソルを合わせる
+      int16_t tbx, tby;
+      uint16_t tbw, tbh;
+      display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x = (display.width() - tbw) / 2 - tbx; // 中央揃え
+      display.setCursor(x, currentY);
+      display.print(date);
 
-      display.print(lines[i]);
-      currentY += tbh + 2; // 行の高さ＋行間
+      currentY += lineHeight;
     }
 
   } while (display.nextPage());
-  Serial.printf("Displayed content:\n%s\n", textToDisplay.c_str());
+  Serial.printf("Displayed date list with highlight on index: %d\n", highlightIndex);
 }
 
-// --- 画面切り替え関数 ---
-void changeScreen(const char* filename) {
-  String content = readFileContent(filename);
-  if (content != currentDisplayFile) { // 同じ内容を二度表示しない
-    drawTextOnEpaper(content);
-    currentDisplayFile = content; // 表示したファイルの内容を記録
+// --- E-Paperに日付とコンテンツの詳細を描画する関数 ---
+void drawDayContentDetails(const String& date, JsonArray contents) {
+  display.setRotation(0); // 回転なし
+  display.setTextColor(GxEPD_BLACK);
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+
+    // 日付の表示 (大きめのフォント)
+    display.setFont(&FreeSansBold12pt7b);
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+    display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
+    uint16_t x_date = (display.width() - tbw) / 2 - tbx;
+    uint16_t y_date = 20; // 画面上部から表示
+    display.setCursor(x_date, y_date);
+    display.print(date);
+
+    display.setFont(&FreeMonoBold9pt7b); // コンテンツ項目用フォント
+    uint16_t lineHeight = 18; // コンテンツ項目の1行の高さの目安
+    uint16_t currentY = y_date + 30; // 日付の下からコンテンツを開始
+
+    // 各コンテンツ項目（ランチ、ディナーなど）をループして表示
+    for (JsonObject contentItem : contents) {
+      String mealType = contentItem["lunchOrDinner"].as<String>();
+      String title = contentItem["title"].as<String>();
+      String body = contentItem["body"].as<String>();
+
+      String line1 = mealType + ": " + title; // 例: lunch: pasta
+      String line2 = "  " + body; // 例:   pasta with tomato sauce (インデント)
+
+      // 1行目 (mealType + title)
+      display.getTextBounds(line1, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x1 = 10; // 左寄せ
+      display.setCursor(x1, currentY - tby);
+      display.print(line1);
+      currentY += lineHeight;
+
+      // 2行目 (body)
+      display.getTextBounds(line2, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x2 = 10; // 左寄せ
+      display.setCursor(x2, currentY - tby);
+      display.print(line2);
+      currentY += lineHeight + 5; // 各コンテンツブロック間のスペース
+    }
+
+  } while (display.nextPage());
+  Serial.printf("Displayed date and details: %s\n", date.c_str());
+}
+
+
+// --- 現在の表示モードとインデックスに基づいて画面を更新する関数 ---
+void updateDisplay() {
+  if (dataArray.size() == 0) {
+    drawErrorMessage("No Data!", "contents.json is empty.");
+    return;
+  }
+
+  if (showContentDetails) {
+    // コンテンツ詳細表示モード
+    if (currentDayIndex >= 0 && currentDayIndex < dataArray.size()) {
+      JsonObject dayData = dataArray[currentDayIndex];
+      String date = dayData["date"].as<String>();
+      JsonArray contents = dayData["contents"].as<JsonArray>();
+      drawDayContentDetails(date, contents);
+    } else {
+      drawErrorMessage("Error!", "Selected day content not found.");
+    }
+  } else {
+    // 日付一覧表示モード
+    drawDateList(currentDayIndex);
   }
 }
 
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
-  Serial.println("ESP32-C3 E-Paper LittleFS Button Control Demo");
+  Serial.println("ESP32-C3 E-Paper Date List & Details Demo");
   Serial.println("Starting E-Paper initialization...");
 
   // ボタンピンをプルアップ入力として設定
@@ -142,8 +232,17 @@ void setup() {
   display.init(115200, true, 50, false);
   Serial.println("E-Paper initialization complete.");
 
-  // 初期画面を表示
-  changeScreen("/initial.txt");
+  // JSONファイルを読み込む
+  if (!loadContentsJson()) {
+    Serial.println("Failed to load contents.json. Please check file and LittleFS upload.");
+    drawErrorMessage("Fatal Error!", "Failed to load contents.json. Check Serial for details.");
+    while(true); // 致命的なエラーなので停止
+  }
+
+  // 初期画面は日付一覧表示
+  currentDayIndex = 0; // 最初の項目をハイライト
+  showContentDetails = false; // 日付一覧モード
+  updateDisplay(); // 画面を更新
 }
 
 void loop() {
@@ -151,27 +250,54 @@ void loop() {
   int button2State = digitalRead(BUTTON_PIN_2);
   unsigned long currentTime = millis();
 
-  // --- 同時押し検出ロジック ---
+  // --- 同時押し検出ロジック (常に日付一覧に戻る) ---
   if (button1State == LOW && button2State == LOW) {
     if (currentTime - lastSimultaneousPressTime > debounceDelay) {
       lastSimultaneousPressTime = currentTime; 
-      changeScreen("/initial.txt"); // 初期画面に戻る
+      if (showContentDetails || currentDayIndex != 0) { // すでに一覧画面で最初の項目がハイライトされていなければ更新
+        showContentDetails = false; // 日付一覧モードに設定
+        currentDayIndex = 0; // 最初の項目をハイライト
+        updateDisplay();
+      }
     }
   } 
   // --- 単独押し検出ロジック ---
-  else if (button1State == LOW) {
+  else if (button1State == LOW) { // BUTTON 1: 詳細表示 or 次の詳細
     if (currentTime - lastButton1PressTime > debounceDelay) {
       lastButton1PressTime = currentTime;
-      changeScreen("/weekly.txt");
+      
+      if (!showContentDetails) {
+        // 日付一覧表示の場合、ハイライトされた日付の詳細コンテンツ表示に切り替える
+        showContentDetails = true;
+      } else {
+        // コンテンツ詳細表示の場合、次の日付の詳細表示に切り替える
+        currentDayIndex++; // 次の日に進む
+        if (currentDayIndex >= dataArray.size()) {
+          currentDayIndex = 0; // 最後のコンテンツなら最初に戻る
+        }
+        // showContentDetails は true のまま維持
+      }
+      updateDisplay(); // 画面を更新
     }
   } 
-  else if (button2State == LOW) {
+  else if (button2State == LOW) { // BUTTON 2: 前の日付選択 or 日付一覧に戻る
     if (currentTime - lastButton2PressTime > debounceDelay) {
       lastButton2PressTime = currentTime;
-      changeScreen("/daily.txt");
+      
+      if (showContentDetails) {
+        // 詳細表示の場合、日付一覧に戻る
+        showContentDetails = false; 
+      } else {
+        // 日付一覧表示の場合、ハイライトを前の日付に移動
+        currentDayIndex--; 
+        if (currentDayIndex < 0) {
+          currentDayIndex = dataArray.size() - 1; // 最初のコンテンツなら最後に戻る
+        }
+      }
+      updateDisplay(); // 画面を更新
     }
   }
 
   // 短い遅延を入れてCPUの負荷を軽減
-  delay(10); 
+  delay(10);
 }
