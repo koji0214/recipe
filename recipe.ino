@@ -1,8 +1,10 @@
 #include <LittleFS.h> // LittleFSライブラリ
+#include <ArduinoJson.h> // ArduinoJsonライブラリ
 #include <GxEPD2_BW.h>
 #include <Adafruit_GFX.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
-#include <Fonts/FreeSansBold12pt7b.h>
+#include <Fonts/FreeSansBold12pt7b.h> // 日付表示用
+#include <Fonts/FreeSansBold9pt7b.h>  // 日付一覧用
 
 // --- E-Paperディスプレイのピン定義 ---
 #define EPD_CS    7  // Chip Select (SS)      -> XIAO D5 / SCL (GPIO7) に接続
@@ -23,31 +25,44 @@ long lastButton2PressTime = 0; // 2つ目のボタン用デバウンス変数
 long lastSimultaneousPressTime = 0; // 同時押し判定のための最後のチェック時間
 const long debounceDelay = 200; // デバウンス時間 (ミリ秒)
 
-// --- 現在表示中の画面の状態を管理する変数 ---
-String currentDisplayFile = ""; // 現在表示しているファイル名 (例: "/initial.txt")
+// --- グローバル変数: JSONコンテンツを保持 ---
+// StaticJsonDocument<XXXX> doc; のようにサイズを明示的に指定することを強く推奨
+// 今回のJSON例ではおおよそ500B程度。余裕を見て1024B (1KB) 程度あれば安全でしょう。
+StaticJsonDocument<1024> doc; 
+JsonArray dataArray; // JSONの最上位配列（日付ごとのデータ）
 
-// --- ファイルからテキストを読み込むヘルパー関数 ---
-String readFileContent(const char* filename) {
+// --- 現在表示中のコンテンツのインデックスと表示モード ---
+int currentDayIndex = 0; // ハイライトされている日付のインデックス
+bool showContentDetails = false; // true: コンテンツ詳細表示, false: 日付一覧表示
+
+// --- ファイルからJSONを読み込むヘルパー関数 ---
+bool loadContentsJson() {
   if (!LittleFS.begin()) {
     Serial.println("LittleFS Mount Failed!");
-    return "FS Error!"; // エラーメッセージを返す
+    return false;
   }
 
-  File file = LittleFS.open(filename, "r");
+  File file = LittleFS.open("/contents.json", "r");
   if (!file) {
-    Serial.printf("Failed to open file: %s\n", filename);
+    Serial.println("Failed to open contents.json for reading!");
     LittleFS.end();
-    return "File Not Found!"; // エラーメッセージを返す
+    return false;
   }
 
-  String content = "";
-  while (file.available()) {
-    content += (char)file.read();
+  DeserializationError error = deserializeJson(doc, file);
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    file.close();
+    LittleFS.end();
+    return false;
   }
+
+  dataArray = doc["recipes"];
   file.close();
   LittleFS.end(); // 読み込みが終わったらアンマウント
-
-  return content;
+  Serial.println("contents.json loaded successfully.");
+  return true;
 }
 
 // --- E-Paperにテキストを描画する関数 ---
