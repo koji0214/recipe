@@ -65,8 +65,8 @@ bool loadContentsJson() {
   return true;
 }
 
-// --- E-Paperにテキストを描画する関数 ---
-void drawTextOnEpaper(const String& textToDisplay) {
+// --- E-Paperにエラーメッセージを描画する専用関数 ---
+void drawErrorMessage(const String& title, const String& message) {
   display.setRotation(0); // ディスプレイの向きを調整
   display.setTextColor(GxEPD_BLACK); // テキスト色を黒に設定
 
@@ -74,64 +74,124 @@ void drawTextOnEpaper(const String& textToDisplay) {
   display.firstPage(); // 描画開始
   do {
     display.fillScreen(GxEPD_WHITE); // 画面を白でクリア
-
-    // テキストを改行で分割し、中央に表示
-    int lineCount = 0;
-    int prevIndex = 0;
-    int currentIndex = 0;
-    String lines[5]; // 最大5行まで対応（必要に応じて調整）
-
-    // 改行コード '\n' でテキストを分割
-    while (currentIndex != -1 && lineCount < 5) {
-      currentIndex = textToDisplay.indexOf('\n', prevIndex);
-      if (currentIndex == -1) {
-        lines[lineCount++] = textToDisplay.substring(prevIndex);
-      } else {
-        lines[lineCount++] = textToDisplay.substring(prevIndex, currentIndex);
-        prevIndex = currentIndex + 1;
-      }
-    }
-
-    // 各行を画面に描画
+    display.setFont(&FreeSansBold12pt7b); // タイトル用フォント
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    int totalTextHeight = 0;
-    
-    // フォント設定の準備 (FreeSansBold12pt7bをメイン、FreeMonoBold9pt7bをサブとして使う)
-    display.setFont(&FreeSansBold12pt7b); // 1行目用のフォント
-    display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
-    totalTextHeight += tbh * (lineCount > 0 ? 1 : 0); // 1行目
-    
-    if (lineCount > 1) {
-      display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
-      display.getTextBounds(" ", 0, 0, &tbx, &tby, &tbw, &tbh); // 1行分の高さの目安
-      totalTextHeight += tbh * (lineCount - 1); // 2行目以降
+
+    display.getTextBounds(title, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor((display.width() - tbw) / 2 - tbx, display.height() / 2 - 30);
+    display.print(title);
+
+    display.setFont(&FreeMonoBold9pt7b); // メッセージ用フォント
+    display.getTextBounds(message, 0, 0, &tbx, &tby, &tbw, &tbh);
+    display.setCursor((display.width() - tbw) / 2 - tbx, display.height() / 2 + 10);
+    display.print(message);
+
+  } while (display.nextPage());
+  Serial.printf("Error displayed: Title='%s', Message='%s'\n", title.c_str(), message.c_str());
     }
 
-    // 全体の高さを考慮して開始Y座標を計算
-    uint16_t startY = (display.height() - totalTextHeight) / 2;
-    if (startY < 0) startY = 0; // 画面内に収まらない場合の上限
+// --- E-Paperに日付一覧を描画する関数 ---
+void drawDateList(int highlightIndex) {
+  display.setRotation(0); // 回転なし
+  display.setTextColor(GxEPD_BLACK);
 
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+
+    display.setFont(&FreeSansBold9pt7b); // 日付一覧用フォント
+    uint16_t lineHeight = 22; // 各日付行の高さの目安
+    uint16_t startY = 20; // 画面上部からの開始位置
     uint16_t currentY = startY;
 
-    for (int i = 0; i < lineCount; ++i) {
-      if (i == 0) {
-        display.setFont(&FreeSansBold12pt7b); // 1行目のフォント
+    // ヘッダー (任意)
+    String header = "Select Date:";
+    int16_t h_tbx, h_tby;
+    uint16_t h_tbw, h_tbh;
+    display.getTextBounds(header, 0, 0, &h_tbx, &h_tby, &h_tbw, &h_tbh);
+    display.setCursor((display.width() - h_tbw) / 2 - h_tbx, currentY);
+    display.print(header);
+    currentY += lineHeight + 5; // ヘッダーとリストの間隔
+
+    for (int i = 0; i < dataArray.size(); ++i) {
+      JsonObject dayData = dataArray[i];
+      Serial.println("dayData: " + dayData);
+      String date = dayData["date"].as<String>();
+
+      if (i == highlightIndex) {
+        // ハイライト表示
+        display.fillRect(0, currentY - 18, display.width(), lineHeight, GxEPD_BLACK); // 背景を黒く塗る
+        display.setTextColor(GxEPD_WHITE); // テキストを白くする
       } else {
-        display.setFont(&FreeMonoBold9pt7b); // 2行目以降のフォント
+        display.setTextColor(GxEPD_BLACK); // 通常のテキスト色
       }
 
-      display.getTextBounds(lines[i], 0, 0, &tbx, &tby, &tbw, &tbh);
-      uint16_t x = (display.width() - tbw) / 2 - tbx;
-      
-      display.setCursor(x, currentY - tby); // テキストの上端にカーソルを合わせる
+      int16_t tbx, tby;
+      uint16_t tbw, tbh;
+      display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x = (display.width() - tbw) / 2 - tbx; // 中央揃え
+      display.setCursor(x, currentY);
+      display.print(date);
 
-      display.print(lines[i]);
-      currentY += tbh + 2; // 行の高さ＋行間
+      currentY += lineHeight;
     }
 
   } while (display.nextPage());
-  Serial.printf("Displayed content:\n%s\n", textToDisplay.c_str());
+  Serial.printf("Displayed date list with highlight on index: %d\n", highlightIndex);
+}
+
+// --- E-Paperに日付とコンテンツの詳細を描画する関数 ---
+void drawDayContentDetails(const String& date, JsonArray contents) {
+  display.setRotation(0); // 回転なし
+  display.setTextColor(GxEPD_BLACK);
+
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+
+    // 日付の表示 (大きめのフォント)
+    display.setFont(&FreeSansBold12pt7b);
+    int16_t tbx, tby;
+    uint16_t tbw, tbh;
+    display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
+    uint16_t x_date = (display.width() - tbw) / 2 - tbx;
+    uint16_t y_date = 20; // 画面上部から表示
+    display.setCursor(x_date, y_date);
+    display.print(date);
+
+    display.setFont(&FreeMonoBold9pt7b); // コンテンツ項目用フォント
+    uint16_t lineHeight = 18; // コンテンツ項目の1行の高さの目安
+    uint16_t currentY = y_date + 30; // 日付の下からコンテンツを開始
+
+    // 各コンテンツ項目（ランチ、ディナーなど）をループして表示
+    for (JsonObject contentItem : contents) {
+      String mealType = contentItem["lunchOrDinner"].as<String>();
+      String title = contentItem["title"].as<String>();
+      String body = contentItem["body"].as<String>();
+
+      String line1 = mealType + ": " + title; // 例: lunch: pasta
+      String line2 = "  " + body; // 例:   pasta with tomato sauce (インデント)
+
+      // 1行目 (mealType + title)
+      display.getTextBounds(line1, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x1 = 10; // 左寄せ
+      display.setCursor(x1, currentY - tby);
+      display.print(line1);
+      currentY += lineHeight;
+
+      // 2行目 (body)
+      display.getTextBounds(line2, 0, 0, &tbx, &tby, &tbw, &tbh);
+      uint16_t x2 = 10; // 左寄せ
+      display.setCursor(x2, currentY - tby);
+      display.print(line2);
+      currentY += lineHeight + 5; // 各コンテンツブロック間のスペース
+    }
+
+  } while (display.nextPage());
+  Serial.printf("Displayed date and details: %s\n", date.c_str());
 }
 
 // --- 画面切り替え関数 ---
