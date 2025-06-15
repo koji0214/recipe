@@ -172,6 +172,31 @@ void drawDateList(int highlightIndex) {
   Serial.printf("Displayed date list with highlight on index: %d\n", highlightIndex);
 }
 
+// テキストを指定文字数で改行して表示する関数
+void printWrappedText(const String& text, uint16_t x, uint16_t y, uint16_t maxWidth, uint16_t lineHeight) {
+  uint16_t currentX = x;
+  uint16_t currentY = y;
+  String currentLine = "";
+  
+  for (int i = 0; i < text.length(); i++) {
+    currentLine += text[i];
+    
+    // 16文字に達したら改行
+    if (currentLine.length() >= 16) {
+      display.setCursor(currentX, currentY);
+      display.print(currentLine);
+      currentY += lineHeight;
+      currentLine = "";
+    }
+  }
+  
+  // 残りのテキストを表示
+  if (currentLine.length() > 0) {
+    display.setCursor(currentX, currentY);
+    display.print(currentLine);
+  }
+}
+
 // --- E-Paperに日付とコンテンツの詳細を描画する関数 ---
 void drawDayContentDetails(const String& date, JsonArray contents) {
   display.setRotation(0); // 回転なし
