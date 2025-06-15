@@ -188,37 +188,64 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     uint16_t tbw, tbh;
     display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
     uint16_t x_date = (display.width() - tbw) / 2 - tbx;
-    uint16_t y_date = 20; // 画面上部から表示
+    uint16_t y_date = 25; // 画面上部から表示
     display.setCursor(x_date, y_date);
     display.print(date);
 
     display.setFont(&FreeMonoBold9pt7b); // コンテンツ項目用フォント
-    uint16_t lineHeight = 18; // コンテンツ項目の1行の高さの目安
-    uint16_t currentY = y_date + 30; // 日付の下からコンテンツを開始
+    uint16_t lineHeight = 22; // コンテンツ項目の1行の高さ
+    uint16_t currentY = y_date + 40; // 日付の下からコンテンツを開始
 
-    // 各コンテンツ項目（ランチ、ディナーなど）をループして表示
+    // 左右の区切り線を描画
+    uint16_t centerX = display.width() / 2;
+    display.drawLine(centerX, currentY - 10, centerX, display.height() - 20, GxEPD_BLACK);
+
+    // 左右のヘッダーを描画
+    display.setFont(&FreeSansBold9pt7b);
+    display.setCursor(centerX - 120, currentY);
+    display.print("Lunch");
+    display.setCursor(centerX + 20, currentY);
+    display.print("Dinner");
+    currentY += lineHeight + 10;
+
+    // 左右のコンテンツを準備
+    String lunchTitle = "";
+    String lunchBody = "";
+    String dinnerTitle = "";
+    String dinnerBody = "";
+
+    // 各コンテンツ項目を分類
     for (JsonObject contentItem : contents) {
       String mealType = contentItem["lunchOrDinner"].as<String>();
       String title = contentItem["title"].as<String>();
       String body = contentItem["body"].as<String>();
 
-      String line1 = mealType + ": " + title; // 例: lunch: pasta
-      String line2 = "  " + body; // 例:   pasta with tomato sauce (インデント)
+      if (mealType == "lunch") {
+        lunchTitle = title;
+        lunchBody = body;
+      } else if (mealType == "dinner") {
+        dinnerTitle = title;
+        dinnerBody = body;
+      }
+    }
 
-      // 1行目 (mealType + title)
-      display.getTextBounds(line1, 0, 0, &tbx, &tby, &tbw, &tbh);
-      uint16_t x1 = 10; // 左寄せ
-      display.setCursor(x1, currentY - tby);
-      display.print(line1);
+    // 左側（Lunch）の表示
+    display.setFont(&FreeMonoBold9pt7b);
+    display.setCursor(10, currentY);
+    display.print(lunchTitle);
+    currentY += lineHeight;
+    
+    // 昼食の本文を改行して表示
+    printWrappedText(lunchBody, 10, currentY, centerX - 20, lineHeight);
+    
+    // 右側（Dinner）の表示
+    currentY = y_date + 40 + lineHeight + 10; // 右側の開始位置をリセット
+    display.setCursor(centerX + 20, currentY);
+    display.print(dinnerTitle);
       currentY += lineHeight;
 
-      // 2行目 (body)
-      display.getTextBounds(line2, 0, 0, &tbx, &tby, &tbw, &tbh);
-      uint16_t x2 = 10; // 左寄せ
-      display.setCursor(x2, currentY - tby);
-      display.print(line2);
-      currentY += lineHeight + 5; // 各コンテンツブロック間のスペース
-    }
+    // 夕食の本文を改行して表示
+    printWrappedText(dinnerBody, centerX + 20, currentY, display.width() - centerX - 30, lineHeight);
 
   } while (display.nextPage());
   Serial.printf("Displayed date and details: %s\n", date.c_str());
