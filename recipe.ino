@@ -128,7 +128,10 @@ void drawDateList(int highlightIndex) {
 
     for (int i = 0; i < displayCount; ++i) {
       JsonObject dayData = dataArray[i];
-      String date = dayData["date"].as<String>();
+      String fullDate = dayData["date"].as<String>();
+      // ここを修正: YYYY-MM-DD から MM-DD を抽出
+      String displayDate = fullDate.substring(5); // インデックス5から末尾まで (MM-DD)
+      
       JsonArray contents = dayData["contents"].as<JsonArray>();
       
       String lunchTitle = "";
@@ -155,7 +158,7 @@ void drawDateList(int highlightIndex) {
 
       // 日付を表示
       display.setCursor(10, currentY);
-      display.print(date);
+      display.print(displayDate); // 修正した日付を表示
 
       // 昼食タイトルを表示
       display.setCursor(100, currentY);
@@ -211,11 +214,14 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     display.setFont(&FreeSansBold12pt7b);
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
+    // ここを修正: YYYY-MM-DD から MM-DD を抽出
+    String displayDate = date.substring(5); // インデックス5から末尾まで (MM-DD)
+
+    display.getTextBounds(displayDate, 0, 0, &tbx, &tby, &tbw, &tbh);
     uint16_t x_date = (display.width() - tbw) / 2 - tbx;
     uint16_t y_date = 25; // 画面上部から表示
     display.setCursor(x_date, y_date);
-    display.print(date);
+    display.print(displayDate); // 修正した日付を表示
 
     display.setFont(&FreeMonoBold9pt7b); // コンテンツ項目用フォント
     uint16_t lineHeight = 22; // コンテンツ項目の1行の高さ
