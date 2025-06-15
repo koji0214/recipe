@@ -101,13 +101,13 @@ void drawDateList(int highlightIndex) {
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    display.setFont(&FreeSansBold9pt7b); // 日付一覧用フォント
-    uint16_t lineHeight = 22; // 各日付行の高さの目安
-    uint16_t startY = 20; // 画面上部からの開始位置
+    display.setFont(&FreeSansBold12pt7b);
+    uint16_t lineHeight = 36; // 行間を0.2行分増やす（30 * 1.2 = 36）
+    uint16_t startY = 25; // 画面上部からの開始位置
     uint16_t currentY = startY;
 
-    // ヘッダー (任意)
-    String header = "Select Date:";
+    // ヘッダー
+    String header = "Weekly Menu:";
     int16_t h_tbx, h_tby;
     uint16_t h_tbw, h_tbh;
     display.getTextBounds(header, 0, 0, &h_tbx, &h_tby, &h_tbw, &h_tbh);
