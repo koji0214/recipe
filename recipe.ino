@@ -113,12 +113,37 @@ void drawDateList(int highlightIndex) {
     display.getTextBounds(header, 0, 0, &h_tbx, &h_tby, &h_tbw, &h_tbh);
     display.setCursor((display.width() - h_tbw) / 2 - h_tbx, currentY);
     display.print(header);
-    currentY += lineHeight + 5; // ヘッダーとリストの間隔
+    currentY += lineHeight - 10;
 
-    for (int i = 0; i < dataArray.size(); ++i) {
+    // 昼・夜のヘッダー
+    display.setFont(&FreeSansBold9pt7b);
+    display.setCursor(100, currentY);
+    display.print("lunch");
+    display.setCursor(250, currentY);
+    display.print("dinner");
+    currentY += 20;
+
+    // 最大7件まで表示
+    int displayCount = min((size_t)7, dataArray.size());
+
+    for (int i = 0; i < displayCount; ++i) {
       JsonObject dayData = dataArray[i];
-      Serial.println("dayData: " + dayData);
       String date = dayData["date"].as<String>();
+      JsonArray contents = dayData["contents"].as<JsonArray>();
+      
+      String lunchTitle = "";
+      String dinnerTitle = "";
+      
+      // 昼食と夕食のタイトルを取得
+      for (JsonObject contentItem : contents) {
+        String mealType = contentItem["lunchOrDinner"].as<String>();
+        String title = contentItem["title"].as<String>();
+        if (mealType == "lunch") {
+          lunchTitle = title;
+        } else if (mealType == "dinner") {
+          dinnerTitle = title;
+        }
+      }
 
       if (i == highlightIndex) {
         // ハイライト表示
@@ -128,12 +153,17 @@ void drawDateList(int highlightIndex) {
         display.setTextColor(GxEPD_BLACK); // 通常のテキスト色
       }
 
-      int16_t tbx, tby;
-      uint16_t tbw, tbh;
-      display.getTextBounds(date, 0, 0, &tbx, &tby, &tbw, &tbh);
-      uint16_t x = (display.width() - tbw) / 2 - tbx; // 中央揃え
-      display.setCursor(x, currentY);
+      // 日付を表示
+      display.setCursor(10, currentY);
       display.print(date);
+
+      // 昼食タイトルを表示
+      display.setCursor(100, currentY);
+      display.print(lunchTitle);
+
+      // 夕食タイトルを表示
+      display.setCursor(250, currentY);
+      display.print(dinnerTitle);
 
       currentY += lineHeight;
     }
