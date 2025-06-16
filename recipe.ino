@@ -283,7 +283,7 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     currentY = y_date + 40 + lineHeight + 10; // 右側の開始位置をリセット
     display.setCursor(centerX + 20, currentY);
     display.print(dinnerTitle);
-      currentY += lineHeight;
+    currentY += lineHeight;
 
     // 夕食の本文を改行して表示
     printWrappedText(dinnerBody, centerX + 20, currentY, display.width() - centerX - 30, lineHeight);
@@ -291,7 +291,6 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
   } while (display.nextPage());
   Serial.printf("Displayed date and details: %s\n", date.c_str());
 }
-
 
 // --- 現在の表示モードとインデックスに基づいて画面を更新する関数 ---
 void updateDisplay() {
