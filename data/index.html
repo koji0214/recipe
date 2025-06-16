@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <title>一覧</title> <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #0056b3; text-align: center; margin-bottom: 30px; }
+        
+        /* ボタンスタイル */
+        .button-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .add-button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .add-button:hover {
+            background-color: #218838;
+        }
+
+        /* モーダルスタイル */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        .submit-button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        .submit-button:hover {
+            background-color: #0056b3;
+        }
+        
+        /* 新しいテーブル風レイアウトのスタイル */
+        .menu-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden; /* 角丸を適用するため */
+        }
+        .menu-table th, .menu-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+        .menu-table th {
+            background-color: #007bff;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .menu-table tr:last-child td {
+            border-bottom: none; /* 最後の行の下線はなし */
+        }
+        .menu-table tr:nth-child(even) {
+            background-color: #f9f9f9; /* 偶数行の背景色 */
+        }
+        .menu-table td.date-col {
+            font-weight: bold;
+            color: #555;
+            white-space: nowrap; /* 日付が改行されないように */
+        }
+        .menu-table td.meal-col {
+            /* flex-grow: 1; */ /* 必要に応じて横幅を調整 */
+        }
+
+        /* 小画面対応 */
+        @media (max-width: 600px) {
+            .menu-table, .menu-table tbody, .menu-table tr, .menu-table td, .menu-table th {
+                display: block; /* テーブル要素をブロック要素に */
+            }
+            .menu-table thead {
+                display: none; /* ヘッダーを非表示 */
+            }
+            .menu-table tr {
+                margin-bottom: 15px;
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                background-color: #fff;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+            .menu-table td {
+                text-align: right;
+                padding-left: 50%;
+                position: relative;
+            }
+            .menu-table td::before {
+                content: attr(data-label); /* data-label属性の内容を表示 */
+                position: absolute;
+                left: 15px;
+                width: calc(50% - 30px);
+                padding-right: 10px;
+                white-space: nowrap;
+                text-align: left;
+                font-weight: bold;
+                color: #0056b3;
+            }
+            .menu-table td.date-col::before { content: "日付"; }
+            .menu-table td.meal-col[data-label="昼"]::before { content: "昼"; } /* 修正：data-labelに基づいて表示 */
+            .menu-table td.meal-col[data-label="夜"]::before { content: "夜"; } /* 修正：data-labelに基づいて表示 */
+        }
+    </style>
+</head>
+<body>
+    <h1>メニュー一覧</h1>
+    
+    <div class="button-container">
+        <button class="add-button" onclick="openModal()">新しい献立を追加</button>
+    </div>
+
+    <div id="menu-container">
+        <p style="text-align: center;" id="loading-message">Loading menu...</p>
+    </div>
+
+    <!-- モーダル -->
+    <div id="menuModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 id="modalTitle">新しい献立を追加</h2>
+            <form id="menuForm">
+                <input type="hidden" id="editIndex" value="">
+                <div class="form-group">
+                    <label for="date">日付:</label>
+                    <input type="date" id="date" required>
+                </div>
+                <div class="form-group">
+                    <label for="lunchTitle">昼食のタイトル:</label>
+                    <input type="text" id="lunchTitle">
+                </div>
+                <div class="form-group">
+                    <label for="lunchBody">昼食の詳細:</label>
+                    <textarea id="lunchBody"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="dinnerTitle">夕食のタイトル:</label>
+                    <input type="text" id="dinnerTitle">
+                </div>
+                <div class="form-group">
+                    <label for="dinnerBody">夕食の詳細:</label>
+                    <textarea id="dinnerBody"></textarea>
+                </div>
+                <button type="submit" class="submit-button">保存</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let menuData = null;
+
+        // モーダル制御
+        function openModal(index = null) {
+            const modal = document.getElementById('menuModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const form = document.getElementById('menuForm');
+            
+            if (index !== null) {
+                modalTitle.textContent = '献立を編集';
+                document.getElementById('editIndex').value = index;
+                
+                const dayData = menuData.recipes[index];
+                document.getElementById('date').value = dayData.date;
+                
+                dayData.contents.forEach(content => {
+                    if (content.lunchOrDinner === 'lunch') {
+                        document.getElementById('lunchTitle').value = content.title;
+                        document.getElementById('lunchBody').value = content.body;
+                    } else if (content.lunchOrDinner === 'dinner') {
+                        document.getElementById('dinnerTitle').value = content.title;
+                        document.getElementById('dinnerBody').value = content.body;
+                    }
+                });
+            } else {
+                modalTitle.textContent = '新しい献立を追加';
+                form.reset();
+                document.getElementById('editIndex').value = '';
+            }
+            
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('menuModal').style.display = 'none';
+        }
+
+        // フォーム送信処理
+        document.getElementById('menuForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const editIndex = document.getElementById('editIndex').value;
+            const date = document.getElementById('date').value;
+            const lunchTitle = document.getElementById('lunchTitle').value;
+            const lunchBody = document.getElementById('lunchBody').value;
+            const dinnerTitle = document.getElementById('dinnerTitle').value;
+            const dinnerBody = document.getElementById('dinnerBody').value;
+
+            const newData = {
+                date: date,
+                contents: [
+                    {
+                        lunchOrDinner: 'lunch',
+                        title: lunchTitle || '',
+                        body: lunchBody || ''
+                    },
+                    {
+                        lunchOrDinner: 'dinner',
+                        title: dinnerTitle || '',
+                        body: dinnerBody || ''
+                    }
+                ]
+            };
+
+            if (editIndex === '') {
+                // 新規追加
+                menuData.recipes.push(newData);
+            } else {
+                // 編集
+                menuData.recipes[editIndex] = newData;
+            }
+
+            // サーバーにデータを送信
+            fetch('/api/contents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(menuData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                closeModal();
+                loadMenuData(); // 一覧を再読み込み
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('データの保存に失敗しました。');
+            });
+        });
+
+        // メニューデータの読み込み
+        function loadMenuData() {
+            fetch('/api/contents')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    menuData = data;
+                    const menuContainer = document.getElementById('menu-container');
+                    const loadingMessage = document.getElementById('loading-message');
+                    if (loadingMessage) {
+                        loadingMessage.remove();
+                    }
+
+                    if (data && data.recipes && data.recipes.length > 0) {
+                        let tableHtml = `<table class="menu-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>日付</th>
+                                                    <th>昼</th>
+                                                    <th>夜</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>`;
+
+                        data.recipes.forEach((dayData, index) => {
+                            const date = dayData.date;
+                            const displayDate = date.substring(5);
+
+                            let lunchTitle = '';
+                            let dinnerTitle = '';
+
+                            dayData.contents.forEach(contentItem => {
+                                if (contentItem.lunchOrDinner === 'lunch') {
+                                    lunchTitle = contentItem.title;
+                                } else if (contentItem.lunchOrDinner === 'dinner') {
+                                    dinnerTitle = contentItem.title;
+                                }
+                            });
+
+                            tableHtml += `
+                                <tr>
+                                    <td class="date-col" data-label="日付">${displayDate}</td>
+                                    <td class="meal-col" data-label="昼">${lunchTitle}</td>
+                                    <td class="meal-col" data-label="夜">${dinnerTitle}</td>
+                                    <td class="action-col" data-label="操作">
+                                        <button onclick="openModal(${index})" style="padding: 5px 10px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">編集</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+
+                        tableHtml += `</tbody></table>`;
+                        menuContainer.innerHTML = tableHtml;
+                    } else {
+                        menuContainer.innerHTML = '<p style="text-align: center;">コンテンツが見つかりませんでした。</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    const menuContainer = document.getElementById('menu-container');
+                    const loadingMessage = document.getElementById('loading-message');
+                    if (loadingMessage) {
+                        loadingMessage.remove();
+                    }
+                    menuContainer.innerHTML = `<p style="color: red; text-align: center;">メニューの読み込み中にエラーが発生しました: ${error.message}</p>`;
+                });
+        }
+
+        // 初期読み込み
+        document.addEventListener('DOMContentLoaded', loadMenuData);
+    </script>
+</body>
+</html>

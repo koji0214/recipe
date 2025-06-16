@@ -1,3 +1,5 @@
+#include <WiFi.h>
+#include <WebServer.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <GxEPD2_BW.h>
@@ -5,6 +7,12 @@
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h> // 日付表示用
 #include <Fonts/FreeSansBold9pt7b.h>  // 日付一覧用
+#include "wifi_config.h"
+
+const char* ssid = WIFI_SSID;           // Wi-FiのSSID
+const char* password = WIFI_PASSWORD;   // Wi-Fiパスワード
+
+WebServer server(80);  // ポート80で待き受け
 
 // --- E-Paperディスプレイのピン定義 ---
 #define EPD_CS    7  // Chip Select (SS)      -> XIAO D5 / SCL (GPIO7) に接続
@@ -35,6 +43,9 @@ JsonArray dataArray; // JSONの最上位配列（日付ごとのデータ）
 int currentDayIndex = 0; // ハイライトされている日付のインデックス
 bool showContentDetails = false; // true: コンテンツ詳細表示, false: 日付一覧表示
 
+const char* CONTENTS_JSON_FILE = "/contents.json"; // ファイル名を変更
+const char* INDEX_HTML_FILE = "/index.html"; // index.htmlのパスを定義
+
 // --- ファイルからJSONを読み込むヘルパー関数 ---
 bool loadContentsJson() {
   if (!LittleFS.begin()) {
@@ -42,7 +53,7 @@ bool loadContentsJson() {
     return false;
   }
 
-  File file = LittleFS.open("/contents.json", "r");
+  File file = LittleFS.open(CONTENTS_JSON_FILE, "r");
   if (!file) {
     Serial.println("Failed to open contents.json for reading!");
     LittleFS.end();
@@ -102,7 +113,7 @@ void drawDateList(int highlightIndex) {
     display.fillScreen(GxEPD_WHITE);
 
     display.setFont(&FreeSansBold12pt7b);
-    uint16_t lineHeight = 36; // 行間を0.2行分増やす（30 * 1.2 = 36）
+    uint16_t lineHeight = 36;
     uint16_t startY = 25; // 画面上部からの開始位置
     uint16_t currentY = startY;
 
@@ -129,7 +140,7 @@ void drawDateList(int highlightIndex) {
     for (int i = 0; i < displayCount; ++i) {
       JsonObject dayData = dataArray[i];
       String fullDate = dayData["date"].as<String>();
-      // ここを修正: YYYY-MM-DD から MM-DD を抽出
+
       String displayDate = fullDate.substring(5); // インデックス5から末尾まで (MM-DD)
       
       JsonArray contents = dayData["contents"].as<JsonArray>();
@@ -214,7 +225,7 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     display.setFont(&FreeSansBold12pt7b);
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    // ここを修正: YYYY-MM-DD から MM-DD を抽出
+    
     String displayDate = date.substring(5); // インデックス5から末尾まで (MM-DD)
 
     display.getTextBounds(displayDate, 0, 0, &tbx, &tby, &tbw, &tbh);
@@ -273,7 +284,7 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     currentY = y_date + 40 + lineHeight + 10; // 右側の開始位置をリセット
     display.setCursor(centerX + 20, currentY);
     display.print(dinnerTitle);
-      currentY += lineHeight;
+    currentY += lineHeight;
 
     // 夕食の本文を改行して表示
     printWrappedText(dinnerBody, centerX + 20, currentY, display.width() - centerX - 30, lineHeight);
@@ -281,7 +292,6 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
   } while (display.nextPage());
   Serial.printf("Displayed date and details: %s\n", date.c_str());
 }
-
 
 // --- 現在の表示モードとインデックスに基づいて画面を更新する関数 ---
 void updateDisplay() {
@@ -306,6 +316,84 @@ void updateDisplay() {
   }
 }
 
+// --- ルートパス ('/') ハンドラ (index.htmlを返す) ---
+void handleRoot() {
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed for root handler!");
+    server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+    return;
+  }
+
+  File file = LittleFS.open(INDEX_HTML_FILE, "r");
+  if (!file) {
+    Serial.printf("Failed to open %s!\n", INDEX_HTML_FILE);
+    server.send(404, "text/plain", "File not found: index.html. Please upload it to LittleFS.");
+    LittleFS.end();
+    return;
+  }
+
+  Serial.printf("Serving %s\n", INDEX_HTML_FILE);
+  server.streamFile(file, "text/html");
+  file.close();
+  LittleFS.end();
+}
+
+// --- JSONデータ提供エンドポイントハンドラ (/api/contents) ---
+void handleApiContents() {
+  if (server.method() == HTTP_POST) {
+    // POSTリクエストの処理
+    String jsonString = server.arg("plain");
+    
+    if (!LittleFS.begin()) {
+      server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+      return;
+    }
+
+    File file = LittleFS.open(CONTENTS_JSON_FILE, "w");
+    if (!file) {
+      server.send(500, "text/plain", "Failed to open file for writing");
+      LittleFS.end();
+      return;
+    }
+
+    file.print(jsonString);
+    file.close();
+    LittleFS.end();
+
+    // メモリ上のデータも更新
+    DeserializationError error = deserializeJson(doc, jsonString);
+    if (error) {
+      server.send(500, "text/plain", "Failed to parse JSON data");
+      return;
+    }
+    dataArray = doc["recipes"];
+
+    server.send(200, "application/json", "{\"status\":\"success\"}");
+    return;
+  }
+
+  // GETリクエストの処理（既存のコード）
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed for /api/contents!");
+    server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+    return;
+  }
+
+  File file = LittleFS.open(CONTENTS_JSON_FILE, "r");
+  if (!file) {
+    Serial.printf("Failed to open %s for API!\n", CONTENTS_JSON_FILE);
+    server.send(404, "text/plain", "File not found: contents.json");
+    LittleFS.end();
+    return;
+  }
+
+  String jsonString = file.readString();
+  file.close();
+  LittleFS.end();
+  Serial.printf("Serving %s via API.\n", CONTENTS_JSON_FILE);
+  server.send(200, "application/json", jsonString);
+}
+
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
@@ -321,10 +409,38 @@ void setup() {
   Serial.println("E-Paper initialization complete.");
 
   // JSONファイルを読み込む
+  // ディスプレイ表示用なので、Webサーバーのハンドラとは別にここで読み込む
   if (!loadContentsJson()) {
     Serial.println("Failed to load contents.json. Please check file and LittleFS upload.");
     drawErrorMessage("Fatal Error!", "Failed to load contents.json. Check Serial for details.");
     while(true); // 致命的なエラーなので停止
+  }
+
+  // --- Wi-Fi接続 ---
+  Serial.printf("Connecting to WiFi: %s\n", ssid);
+  WiFi.begin(ssid, password);
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) { // 20回までリトライ (約10秒)
+    delay(500);
+    Serial.print(".");
+    retries++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected.");
+    Serial.printf("IP Address: %s\n", WiFi.localIP().toString().c_str());
+
+    // --- Webサーバーの設定 ---
+    // ルートパス ('/') へのリクエストは index.html を返す
+    server.on("/", handleRoot);
+    // JSONデータ提供のためのAPIエンドポイント
+    server.on("/api/contents", handleApiContents);
+
+    server.begin(); // Webサーバーを開始
+    Serial.println("HTTP server started.");
+  } else {
+    Serial.println("\nFailed to connect to WiFi. Web server will not be available.");
+    drawErrorMessage("WiFi Error!", "Failed to connect to WiFi. Check credentials.");
   }
 
   // 初期画面は日付一覧表示
@@ -334,6 +450,9 @@ void setup() {
 }
 
 void loop() {
+  // Webサーバーのリクエストを処理
+  server.handleClient();
+
   int button1State = digitalRead(BUTTON_PIN_1);
   int button2State = digitalRead(BUTTON_PIN_2);
   unsigned long currentTime = millis();
@@ -348,7 +467,7 @@ void loop() {
         updateDisplay();
       }
     }
-  } 
+  }
   // --- 単独押し検出ロジック ---
   else if (button1State == LOW) { // BUTTON 1: 詳細表示 or 次の詳細
     if (currentTime - lastButton1PressTime > debounceDelay) {
@@ -367,7 +486,7 @@ void loop() {
       }
       updateDisplay(); // 画面を更新
     }
-  } 
+  }
   else if (button2State == LOW) { // BUTTON 2: 前の日付選択 or 日付一覧に戻る
     if (currentTime - lastButton2PressTime > debounceDelay) {
       lastButton2PressTime = currentTime;
