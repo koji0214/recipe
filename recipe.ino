@@ -43,7 +43,8 @@ JsonArray dataArray; // JSONの最上位配列（日付ごとのデータ）
 int currentDayIndex = 0; // ハイライトされている日付のインデックス
 bool showContentDetails = false; // true: コンテンツ詳細表示, false: 日付一覧表示
 
-const char* PAGES_FILE = "/contents.json";
+const char* CONTENTS_JSON_FILE = "/contents.json"; // ファイル名を変更
+const char* INDEX_HTML_FILE = "/index.html"; // index.htmlのパスを定義
 
 // --- ファイルからJSONを読み込むヘルパー関数 ---
 bool loadContentsJson() {
@@ -52,7 +53,7 @@ bool loadContentsJson() {
     return false;
   }
 
-  File file = LittleFS.open(PAGES_FILE, "r");
+  File file = LittleFS.open(CONTENTS_JSON_FILE, "r");
   if (!file) {
     Serial.println("Failed to open contents.json for reading!");
     LittleFS.end();
@@ -315,22 +316,39 @@ void updateDisplay() {
   }
 }
 
-// --- Webサーバーのルートハンドラ ---
+// --- ルートパス ('/') ハンドラ (index.htmlを返す) ---
 void handleRoot() {
-  server.send(200, "text/plain", "Hello from ESP32-C3 Web Server!");
-}
-
-// --- contents.jsonの内容を返すハンドラ ---
-void handleGetContents() {
   if (!LittleFS.begin()) {
-    Serial.println("LittleFS Mount Failed for Web Server!");
+    Serial.println("LittleFS Mount Failed for root handler!");
     server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
     return;
   }
 
-  File file = LittleFS.open(PAGES_FILE, "r");
+  File file = LittleFS.open(INDEX_HTML_FILE, "r");
   if (!file) {
-    Serial.println("Failed to open contents.json for Web Server!");
+    Serial.printf("Failed to open %s!\n", INDEX_HTML_FILE);
+    server.send(404, "text/plain", "File not found: index.html. Please upload it to LittleFS.");
+    LittleFS.end();
+    return;
+  }
+
+  Serial.printf("Serving %s\n", INDEX_HTML_FILE);
+  server.streamFile(file, "text/html");
+  file.close();
+  LittleFS.end();
+}
+
+// --- JSONデータ提供エンドポイントハンドラ (/api/contents) ---
+void handleApiContents() {
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed for /api/contents!");
+    server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+    return;
+  }
+
+  File file = LittleFS.open(CONTENTS_JSON_FILE, "r");
+  if (!file) {
+    Serial.printf("Failed to open %s for API!\n", CONTENTS_JSON_FILE);
     server.send(404, "text/plain", "File not found: contents.json");
     LittleFS.end();
     return;
@@ -339,7 +357,7 @@ void handleGetContents() {
   String jsonString = file.readString();
   file.close();
   LittleFS.end();
-  Serial.println("Sending contents.json via Web Server.");
+  Serial.printf("Serving %s via API.\n", CONTENTS_JSON_FILE);
   server.send(200, "application/json", jsonString);
 }
 
@@ -358,6 +376,7 @@ void setup() {
   Serial.println("E-Paper initialization complete.");
 
   // JSONファイルを読み込む
+  // ディスプレイ表示用なので、Webサーバーのハンドラとは別にここで読み込む
   if (!loadContentsJson()) {
     Serial.println("Failed to load contents.json. Please check file and LittleFS upload.");
     drawErrorMessage("Fatal Error!", "Failed to load contents.json. Check Serial for details.");
@@ -379,8 +398,11 @@ void setup() {
     Serial.printf("IP Address: %s\n", WiFi.localIP().toString().c_str());
 
     // --- Webサーバーの設定 ---
-    server.on("/", handleRoot); // ルートパスへのリクエストハンドラ
-    server.on("/contents", handleGetContents); // /contentsパスへのリクエストハンドラ
+    // ルートパス ('/') へのリクエストは index.html を返す
+    server.on("/", handleRoot);
+    // JSONデータ提供のためのAPIエンドポイント
+    server.on("/api/contents", handleApiContents);
+
     server.begin(); // Webサーバーを開始
     Serial.println("HTTP server started.");
   } else {
