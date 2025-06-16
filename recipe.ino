@@ -43,6 +43,8 @@ JsonArray dataArray; // JSONの最上位配列（日付ごとのデータ）
 int currentDayIndex = 0; // ハイライトされている日付のインデックス
 bool showContentDetails = false; // true: コンテンツ詳細表示, false: 日付一覧表示
 
+const char* PAGES_FILE = "/contents.json";
+
 // --- ファイルからJSONを読み込むヘルパー関数 ---
 bool loadContentsJson() {
   if (!LittleFS.begin()) {
@@ -50,7 +52,7 @@ bool loadContentsJson() {
     return false;
   }
 
-  File file = LittleFS.open("/contents.json", "r");
+  File file = LittleFS.open(PAGES_FILE, "r");
   if (!file) {
     Serial.println("Failed to open contents.json for reading!");
     LittleFS.end();
@@ -314,6 +316,34 @@ void updateDisplay() {
   }
 }
 
+// --- Webサーバーのルートハンドラ ---
+void handleRoot() {
+  server.send(200, "text/plain", "Hello from ESP32-C3 Web Server!");
+}
+
+// --- contents.jsonの内容を返すハンドラ ---
+void handleGetContents() {
+  if (!LittleFS.begin()) {
+    Serial.println("LittleFS Mount Failed for Web Server!");
+    server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+    return;
+  }
+
+  File file = LittleFS.open(PAGES_FILE, "r");
+  if (!file) {
+    Serial.println("Failed to open contents.json for Web Server!");
+    server.send(404, "text/plain", "File not found: contents.json");
+    LittleFS.end();
+    return;
+  }
+
+  String jsonString = file.readString();
+  file.close();
+  LittleFS.end();
+  Serial.println("Sending contents.json via Web Server.");
+  server.send(200, "application/json", jsonString);
+}
+
 // --- setup() 関数: プログラムの初期設定と一度だけ実行される処理 ---
 void setup() {
   Serial.begin(115200);
@@ -366,6 +396,9 @@ void setup() {
 }
 
 void loop() {
+  // Webサーバーのリクエストを処理
+  server.handleClient();
+
   int button1State = digitalRead(BUTTON_PIN_1);
   int button2State = digitalRead(BUTTON_PIN_2);
   unsigned long currentTime = millis();
