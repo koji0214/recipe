@@ -1,3 +1,5 @@
+#include <WiFi.h>
+#include <WebServer.h>
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <GxEPD2_BW.h>
@@ -5,6 +7,12 @@
 #include <Fonts/FreeMonoBold9pt7b.h>
 #include <Fonts/FreeSansBold12pt7b.h> // 日付表示用
 #include <Fonts/FreeSansBold9pt7b.h>  // 日付一覧用
+#include "wifi_config.h"
+
+const char* ssid = WIFI_SSID;           // Wi-FiのSSID
+const char* password = WIFI_PASSWORD;   // Wi-Fiパスワード
+
+WebServer server(80);  // ポート80で待き受け
 
 // --- E-Paperディスプレイのピン定義 ---
 #define EPD_CS    7  // Chip Select (SS)      -> XIAO D5 / SCL (GPIO7) に接続
@@ -325,6 +333,30 @@ void setup() {
     Serial.println("Failed to load contents.json. Please check file and LittleFS upload.");
     drawErrorMessage("Fatal Error!", "Failed to load contents.json. Check Serial for details.");
     while(true); // 致命的なエラーなので停止
+  }
+
+  // --- Wi-Fi接続 ---
+  Serial.printf("Connecting to WiFi: %s\n", ssid);
+  WiFi.begin(ssid, password);
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) { // 20回までリトライ (約10秒)
+    delay(500);
+    Serial.print(".");
+    retries++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected.");
+    Serial.printf("IP Address: %s\n", WiFi.localIP().toString().c_str());
+
+    // --- Webサーバーの設定 ---
+    server.on("/", handleRoot); // ルートパスへのリクエストハンドラ
+    server.on("/contents", handleGetContents); // /contentsパスへのリクエストハンドラ
+    server.begin(); // Webサーバーを開始
+    Serial.println("HTTP server started.");
+  } else {
+    Serial.println("\nFailed to connect to WiFi. Web server will not be available.");
+    drawErrorMessage("WiFi Error!", "Failed to connect to WiFi. Check credentials.");
   }
 
   // 初期画面は日付一覧表示
