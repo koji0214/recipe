@@ -122,19 +122,26 @@
             font-weight: bold;
             text-transform: uppercase;
         }
+        .menu-table tr {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .menu-table tr:hover {
+            background-color: #f0f0f0;
+        }
         .menu-table tr:last-child td {
-            border-bottom: none; /* 最後の行の下線はなし */
+            border-bottom: none;
         }
         .menu-table tr:nth-child(even) {
-            background-color: #f9f9f9; /* 偶数行の背景色 */
+            background-color: #f9f9f9;
         }
         .menu-table td.date-col {
             font-weight: bold;
             color: #555;
-            white-space: nowrap; /* 日付が改行されないように */
+            white-space: nowrap;
         }
         .menu-table td.meal-col {
-            /* flex-grow: 1; */ /* 必要に応じて横幅を調整 */
+            /* flex-grow: 1; */
         }
 
         /* 小画面対応 */
@@ -374,7 +381,6 @@
                                                     <th>日付</th>
                                                     <th>昼</th>
                                                     <th>夜</th>
-                                                    <th>操作</th>
                                                 </tr>
                                             </thead>
                                             <tbody>`;
@@ -395,13 +401,10 @@
                             });
 
                             tableHtml += `
-                                <tr>
+                                <tr onclick="openModal(${index})">
                                     <td class="date-col" data-label="日付">${displayDate}</td>
                                     <td class="meal-col" data-label="昼">${lunchTitle}</td>
                                     <td class="meal-col" data-label="夜">${dinnerTitle}</td>
-                                    <td class="action-col" data-label="操作">
-                                        <button onclick="openModal(${index})" style="padding: 5px 10px; background-color: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer;">編集</button>
-                                    </td>
                                 </tr>
                             `;
                         });
