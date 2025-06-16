@@ -82,9 +82,23 @@
             cursor: pointer;
             width: 100%;
             font-size: 16px;
+            margin-bottom: 10px;
         }
         .submit-button:hover {
             background-color: #0056b3;
+        }
+        .delete-button {
+            background-color: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        .delete-button:hover {
+            background-color: #c82333;
         }
         
         /* 新しいテーブル風レイアウトのスタイル */
@@ -199,6 +213,7 @@
                     <textarea id="dinnerBody"></textarea>
                 </div>
                 <button type="submit" class="submit-button">保存</button>
+                <button type="button" class="delete-button" id="deleteButton" style="display: none;" onclick="deleteMenu()">削除</button>
             </form>
         </div>
     </div>
@@ -211,10 +226,12 @@
             const modal = document.getElementById('menuModal');
             const modalTitle = document.getElementById('modalTitle');
             const form = document.getElementById('menuForm');
+            const deleteButton = document.getElementById('deleteButton');
             
             if (index !== null) {
                 modalTitle.textContent = '献立を編集';
                 document.getElementById('editIndex').value = index;
+                deleteButton.style.display = 'block'; // 編集時は削除ボタンを表示
                 
                 const dayData = menuData.recipes[index];
                 document.getElementById('date').value = dayData.date;
@@ -232,6 +249,7 @@
                 modalTitle.textContent = '新しい献立を追加';
                 form.reset();
                 document.getElementById('editIndex').value = '';
+                deleteButton.style.display = 'none'; // 新規追加時は削除ボタンを非表示
             }
             
             modal.style.display = 'block';
@@ -296,6 +314,41 @@
                 alert('データの保存に失敗しました。');
             });
         });
+
+        // 削除機能
+        function deleteMenu() {
+            const editIndex = document.getElementById('editIndex').value;
+            if (editIndex === '') {
+                return; // 新規追加時は削除できない
+            }
+
+            if (!confirm('この献立を削除してもよろしいですか？')) {
+                return;
+            }
+
+            // 配列から該当の要素を削除
+            menuData.recipes.splice(editIndex, 1);
+
+            // サーバーにデータを送信
+            fetch('/api/contents', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(menuData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                closeModal();
+                loadMenuData(); // 一覧を再読み込み
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('データの削除に失敗しました。');
+            });
+        }
 
         // メニューデータの読み込み
         function loadMenuData() {
