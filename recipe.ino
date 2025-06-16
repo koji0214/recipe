@@ -113,7 +113,7 @@ void drawDateList(int highlightIndex) {
     display.fillScreen(GxEPD_WHITE);
 
     display.setFont(&FreeSansBold12pt7b);
-    uint16_t lineHeight = 36; // 行間を0.2行分増やす（30 * 1.2 = 36）
+    uint16_t lineHeight = 36;
     uint16_t startY = 25; // 画面上部からの開始位置
     uint16_t currentY = startY;
 
@@ -140,7 +140,7 @@ void drawDateList(int highlightIndex) {
     for (int i = 0; i < displayCount; ++i) {
       JsonObject dayData = dataArray[i];
       String fullDate = dayData["date"].as<String>();
-      // ここを修正: YYYY-MM-DD から MM-DD を抽出
+
       String displayDate = fullDate.substring(5); // インデックス5から末尾まで (MM-DD)
       
       JsonArray contents = dayData["contents"].as<JsonArray>();
@@ -225,7 +225,7 @@ void drawDayContentDetails(const String& date, JsonArray contents) {
     display.setFont(&FreeSansBold12pt7b);
     int16_t tbx, tby;
     uint16_t tbw, tbh;
-    // ここを修正: YYYY-MM-DD から MM-DD を抽出
+    
     String displayDate = date.substring(5); // インデックス5から末尾まで (MM-DD)
 
     display.getTextBounds(displayDate, 0, 0, &tbx, &tby, &tbw, &tbh);
@@ -434,7 +434,7 @@ void loop() {
         updateDisplay();
       }
     }
-  } 
+  }
   // --- 単独押し検出ロジック ---
   else if (button1State == LOW) { // BUTTON 1: 詳細表示 or 次の詳細
     if (currentTime - lastButton1PressTime > debounceDelay) {
@@ -453,7 +453,7 @@ void loop() {
       }
       updateDisplay(); // 画面を更新
     }
-  } 
+  }
   else if (button2State == LOW) { // BUTTON 2: 前の日付選択 or 日付一覧に戻る
     if (currentTime - lastButton2PressTime > debounceDelay) {
       lastButton2PressTime = currentTime;
