@@ -340,6 +340,39 @@ void handleRoot() {
 
 // --- JSONデータ提供エンドポイントハンドラ (/api/contents) ---
 void handleApiContents() {
+  if (server.method() == HTTP_POST) {
+    // POSTリクエストの処理
+    String jsonString = server.arg("plain");
+    
+    if (!LittleFS.begin()) {
+      server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
+      return;
+    }
+
+    File file = LittleFS.open(CONTENTS_JSON_FILE, "w");
+    if (!file) {
+      server.send(500, "text/plain", "Failed to open file for writing");
+      LittleFS.end();
+      return;
+    }
+
+    file.print(jsonString);
+    file.close();
+    LittleFS.end();
+
+    // メモリ上のデータも更新
+    DeserializationError error = deserializeJson(doc, jsonString);
+    if (error) {
+      server.send(500, "text/plain", "Failed to parse JSON data");
+      return;
+    }
+    dataArray = doc["recipes"];
+
+    server.send(200, "application/json", "{\"status\":\"success\"}");
+    return;
+  }
+
+  // GETリクエストの処理（既存のコード）
   if (!LittleFS.begin()) {
     Serial.println("LittleFS Mount Failed for /api/contents!");
     server.send(500, "text/plain", "Internal Server Error: LittleFS mount failed.");
